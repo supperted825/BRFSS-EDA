@@ -1,0 +1,408 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+* * *
+
+#### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+options(dplyr.summarise.inform = FALSE)
+```
+
+#### Load data
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+
+* * *
+
+### **Part 1: Data**
+
+</br>
+
+##### **Dataset Overview**
+
+The Behavioural Risk Factor Surveillance System (BRFSS) collects data on preventive health practices and risk behaviours that are linked to chronic diseases, injuries, and preventable infectious diseases. Some key characteristics of the BRFSS survey are:
+
+</br>
+
+* Non-institutionalized adult population (18 years of age and older) in the US.
+* Conducted as telephone surveys over a limited period of time (1-3 months).
+* Home telephone numbers are obtained through random-digit dialing.
+* All telephone surveys are conducted in exact wording via script.
+* All surveys are conducted on strict schedule and protocols.
+* Addition of optional modules & state-specific questions in 2013.
+
+</br>
+
+In total, the BRFSS survey in 2013 surveyed a total of 491775 persons for 330 variables. Only the first 102 columns are part of the core survey. Thus, there may be a significant number of missing entries for the recorded variables from 103 - 330.
+
+</br>
+
+##### **Focus of Study**
+
+BRFSS data is typically used for establishing and tracking state and local health objectives, planning health programs, implementing disease prevention and health promotion activities, and monitor trends (from CDC website). The core section of the 2013 questionnaire opens with health-related questions including general health status, health-related quality of life, healthcare access, and sleeping patterns. Questions are then asked about chronic health conditions such as hypertension, cholesterol and chronic health conditions. The remainder of the core section asks questions about risk factors including demographics, tobacco & alcohol use, diet, exercise, seatbelt use and immunizations.
+
+</br>
+
+##### **Scope of Inference**
+
+Since sampling is done via random-digit dialing of, the sampling method appears to be simple and random. In addition the large sample size of over 400,000 and the data weighing protocols followed by BRFSS allow the collected data to be balanced by age, gender, race and ethnicity, education level, marital status, renter or owner status, etc. Thus, we can consider the correlations between the variables presented in the study to be generalisable. However, since BRFSS is an observational study, no causation can be drawn from the observations between recorded variables. Further experimental studies will instead be required to confirm any causal hypotheses.
+
+</br>
+
+* * *
+
+### **Part 2: Research Questions**
+
+</br>
+
+#### **1. How are education level, income and perceived general health correlated?**
+
+Individual perception of personal health (both physical and mental) is a strong reflection of perceived quality of life. This research question seeks to uncover if a higher level of education or income is necessarily linked to better or poorer perceived health.
+
+* Education Level (educa) - 6 Levels of education ranging from minimal education to college
+* Income Level (income2) - 8 Levels of annual income ranges
+* General Health (genhlth) - Poor, Fair, Good, Very Good, Excellent
+
+</br>
+
+#### **2. Is there a relationship between exercise and perception of general health?**
+
+Exercise and health have always been closely related. Thus, this research question seeks to uncover trends between exercise in each state and general health perceived by an individual. More specifically, which states exercise more, and do they then have better perception of their general health?
+
+* US State (X_state) - One of the 50 states of the united states
+* Exercised in Past 30 Days (exerany2) - Yes or No
+* General Health (genhlth) - Poor, Fair, Good, Very Good, Excellent
+
+</br>
+
+#### **3. How does healthcare access affect perceived general health?**
+
+Access to or awareness healthcare may intrinsically affect perceived state of health. For instance, it is unclear if people who do not perform routine checkups perceive themselves as healthier or not. This research question expands on Research Question 2 by exploring the healthcare access across states and its relationship to general health.
+
+* US State (X_state) - One of the 50 states of the united states
+* General Health (genhlth) - Poor, Fair, Good, Very Good, Excellent
+* Could Not See Doctor Due to Cost (medcost) - Yes or No
+* Length Of Time Since Last Routine Checkup (checkup1) - 5 Level of time ranges
+
+</br>
+
+* * *
+
+### **Part 3: Exploratory Data Analysis**
+
+</br>
+
+#### **Research Question 1**
+
+Question 1 is concerned with the relationship between education and perception of general health.
+
+First, we clean up the labels for education & general health perception to make plotting more readable.
+
+```{r}
+
+filtered1 <- brfss2013
+
+filtered1$genhlth <-
+  factor(filtered1$genhlth, order=TRUE, levels=c("Poor", "Fair", "Good", "Very good", "Excellent"))
+
+filtered1$educa <- ifelse(filtered1$educa=="Never attended school or only kindergarten", "Minimal",
+  ifelse(filtered1$educa=="Grades 1 through 8 (Elementary)", "Elementary",
+  ifelse(filtered1$educa=="Grades 9 though 11 (Some high school)", "Mid-High",
+  ifelse(filtered1$educa=="Grade 12 or GED (High school graduate)", "High Sch",
+  ifelse(filtered1$educa=="College 1 year to 3 years (Some college or technical school)", "College",
+  ifelse(filtered1$educa=="College 4 years or more (College graduate)", "Graduate", NA))))))
+
+filtered1$educa <-
+  factor(filtered1$educa, order=TRUE, levels=c("Minimal", "Elementary", "Mid-High", "High Sch", "College", "Graduate"))
+
+filtered1$income2 <- ifelse(filtered1$income2=="Less than $10,000", "<10k",
+  ifelse(filtered1$income2=="Less than $15,000", "<15k",
+  ifelse(filtered1$income2=="Less than $20,000", "<20k",
+  ifelse(filtered1$income2=="Less than $25,000", "<25k",
+  ifelse(filtered1$income2=="Less than $35,000", "<35k",
+  ifelse(filtered1$income2=="Less than $50,000", "<50k",
+  ifelse(filtered1$income2=="Less than $75,000", "<75k",
+  ifelse(filtered1$income2=="$75,000 or more", ">75k", NA))))))))
+
+filtered1$income2 <-
+  factor(filtered1$income2, order=TRUE, levels=c("<15k", "<20k", "<25k", "<35k", "<50k", "<75k", ">75k"))
+
+```
+
+Then we filter out the NA values for any of the interested variables for the question: General Health, Education, Income.
+
+```{r}
+
+filtered1 <- filtered1 %>%
+  filter(genhlth!="NA") %>%
+  filter(educa!="NA") %>%
+  filter(income2!="NA")
+
+```
+
+Now, produce new dataframes which group general health perception by education and income respectively, and count.
+
+```{r}
+
+groupbyedu_df <- filtered1 %>%
+  group_by(genhlth, educa) %>%
+  summarize(count=n())
+
+groupbyinc_df <- filtered1 %>%
+  group_by(genhlth, income2) %>%
+  summarize(count=n())
+
+```
+
+
+Finally, plot a frequency plot of general health perception vs education level.
+
+```{r}
+theme_nogrid <- function (base_size = 12, base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) %+replace% 
+    theme(panel.grid = element_blank())   
+}
+
+ggplot(groupbyedu_df, aes(educa, genhlth)) +
+  ggtitle("Fig. 1, GenHealth by Education") + xlab("Education") + ylab("General Health Perception") +
+  geom_point(aes(size = count, color = count), shape = 15) +
+  scale_size_continuous(range = c(3,15)) + 
+  scale_color_gradient(low = "white", high = "black") +
+  theme_nogrid()
+
+```
+
+</br>
+
+Plot the same for general health perception vs income bracket.
+
+```{r}
+ggplot(groupbyinc_df, aes(income2, genhlth)) +
+  ggtitle("Fig. 2, GenHealth by Income") + xlab("Income Level") + ylab("General Health Perception") +
+  geom_point(aes(size = count, color = count), shape = 15) +
+  scale_size_continuous(range = c(3,15)) + 
+  scale_color_gradient(low = "white", high = "black") +
+  theme_nogrid()
+```
+
+</br>
+
+##### **Analysis**
+
+The relationship between higher education and better perception of one's general health is inconclusive. Although majority of samples are found to have both at least a high school education and at least a good perception of general health, there are insufficient respondents with lower levels of education to verify the trend.
+
+On the other hand, higher income is more clearly correlated with a better perception of one's general health. The upper left and bottom right corners of Figure 2 are more faint than the other areas of the graph, which suggest a lower probability of having a low income yet excellent level of health, or a high income yet poor level of health. A great number of samples are clustered in the top right corner, which indicates the prevalence of both high income and excellent perception of general health. 
+
+</br>
+
+#### **Research Question 2**
+
+Question 2 is concerned with the relationship between exercise and perceived general health.
+
+Since different states have different populations, we need to use a percentage based metric rather than the raw count. A good way to do this is simply to count the % of each value on the ordinal scale for perception of general health.
+
+For simplicity, we say that an individual has good perception of their health if they at least rate their perception of general health as "Good", whereas any ordinal rating below that will be considered as "Bad". We first create a new variable to store this classification.
+
+At the same time, we filter out the NA values and numerical (?) states and select only relevant variables.
+
+```{r}
+
+filtered2 <- brfss2013 %>%
+  mutate(healthgood = ifelse(
+    genhlth == "Good" | genhlth == "Very good" | genhlth == "Excellent",
+    TRUE, FALSE))
+
+filtered2 <- filtered2 %>%
+  filter(!is.na(healthgood)) %>%
+  filter(!is.na(exerany2)) %>%
+  filter(X_state != 0 | X_state != 80)
+
+filtered3 <- filtered2 %>%
+  select(X_state, healthgood, exerany2)
+
+head(filtered3)
+```
+
+Now let's create a data frame where we group by state, and count the % occurrences of good percieved health and exercise.
+
+```{r}
+groupby_statehealthexer <- filtered3 %>%
+  group_by(X_state) %>%
+  summarise(percent_good = sum(healthgood == "TRUE") / n(),
+            percent_exer = sum(exerany2 == "Yes") / n()) %>%
+  arrange(desc(percent_good))
+
+groupby_statehealthexer
+```
+
+Overall, the residents of Minnesota have the greatest percentage of good health at 86.7%, while Puerto Rico has the worst at 60.8%. We can also calculate some statistics for the overall distribution of perception of good health as follows:
+
+```{r}
+groupby_statehealthexer %>%
+  summarise(mean = mean(percent_good),
+            median = median(percent_good),
+            IQR = IQR(percent_good),
+            count = n())
+```
+
+We can also visualise such information on a box plot, which brings more intuition to our analysis. We see that Puerto Rico is actually an extreme outlier, with a particularly low perception of general health! In addition, the IQR of the distribution is quite small at only 6.2%. This suggests that broadly speaking, perceptions of health are rather consistent across the entire united states.
+
+```{r}
+ggplot(groupby_statehealthexer, aes(x = percent_good)) +
+  geom_boxplot() + ggtitle("Fig. 3, Distribution of Perceived Good Health") +
+  xlab("% Perceived Good Health")
+```
+
+Performing similar observations for exercise in the past 30 days...
+
+```{r}
+groupby_statehealthexer %>% arrange(desc(percent_exer))
+```
+
+```{r}
+groupby_statehealthexer %>%
+  summarise(mean = mean(percent_exer),
+            median = median(percent_exer),
+            IQR = IQR(percent_exer),
+            count = n())
+```
+
+
+```{r}
+ggplot(groupby_statehealthexer, aes(x = percent_exer)) +
+  geom_boxplot() + ggtitle("Fig. 4, Distribution of Those Exercised in Last Month") +
+  xlab("% Exercised in Last Month")
+```
+
+Finally, it is meaningful to visualise the relationship between exercise and perceieved good health with a scatter plot of the two variables.
+
+```{r}
+ggplot(groupby_statehealthexer, aes(x = percent_exer, y = percent_good)) +
+  geom_point() + ggtitle("Fig. 5, % Good Perceived Health vs % Exercised Past 30 Days") +
+  xlab("% Exercised Last 30 Days") + ylab("% Good Perceived Health")
+```
+
+
+##### **Analysis**
+
+The data presented suggests that there is a strong relationship between exercise and perceived general health. In particular, we observe that Puerto Rico, with the lowest percentage of respondents who exercised in the last 30 days at 50.3%, also has the lowest rate of perceived good general health at 60.6%. This analysis, however, becomes much clearer in the final presentation of data in Figure 5. In fact, there is a clear positive correlation between exercise and good perceived health.
+
+</br>
+
+#### **Research Question 3**
+
+Question 3 is concerned with the relationship between healthcare access and perceived general health.
+
+To answer this question, let us first prepare the healthgood variable that was previously used. We also clean up the NA variables and select only the relevant columns as before.
+
+```{r}
+filtered4 <- brfss2013 %>%
+  mutate(healthgood = ifelse(
+    genhlth == "Good" | genhlth == "Very good" | genhlth == "Excellent",
+    TRUE, FALSE))
+
+filtered4 <- filtered4 %>%
+  filter(!is.na(healthgood)) %>%
+  filter(!is.na(medcost)) %>%
+  filter(!is.na(checkup1)) %>%
+  filter(X_state != 0 | X_state != 80)
+
+filtered4 <- filtered4 %>%
+  select(X_state, healthgood, checkup1, medcost)
+
+head(filtered4)
+```
+
+Like before, we clean up the checkup variable categories for easier visualisation later. Additionally, it is often recommended that health checkups should be performed annually. Thus, we label those who have had their last checkup within past year as 'recent', while others are labeled as 'not recent'.
+
+```{r}
+filtered4$checkup1 <- ifelse(filtered4$checkup1=="Within past year", TRUE,
+  ifelse(filtered4$checkup1=="Within past 2 years", FALSE,
+  ifelse(filtered4$checkup1=="Within past 5 years", FALSE,
+  ifelse(filtered4$checkup1=="5 or more years ago", FALSE,
+  ifelse(filtered4$checkup1=="Never", FALSE, filtered4$checkup1)))))
+
+head(filtered4$checkup1)
+```
+
+Then, we group by state and calculate the % of those who have good health, have had recent checkups, and ever had to avoid seeking medical help due to costs.
+
+```{r}
+groupby_statehealthcheck <- filtered4 %>%
+  group_by(X_state) %>%
+  summarise(percent_good = sum(healthgood == TRUE) / n(),
+            percent_cost = sum(medcost == "Yes") / n(),
+            percent_recent = sum(checkup1 == TRUE) / n())
+
+groupby_statehealthcheck
+```
+
+Since we had previously explored the % of perceived good health, we will focus on the two variables of "could not seek medical help due to costs" and "had a recent medical checkup". Arranging by descending order of % recent checkup, we see Rhode Island is highest at 83.3%, while Alaska is lowest at 59.9%. Surprisingly, although the percentage for Alaska is so much lower, Alaska still has a relatively competitive rate of well-perceived general health, at 84.8%. From our previous analysis of the percent_good distribution, we know that this is actually above both the mean and median of the rate of well-perceived general health. Thus, preliminary analysis suggests that the % of recent health checkups may not be a very significant factor in influencing perceived general health.
+
+```{r}
+groupby_statehealthcheck %>% arrange(desc(percent_recent))
+```
+
+We plot the box plot of the distribution of % recent checkups.
+
+```{r}
+ggplot(groupby_statehealthcheck, aes(x = percent_recent)) +
+  geom_boxplot() + ggtitle("Fig. 6, Distribution of Health Checkup Past Year") +
+  xlab("% Health Checkup in Past Year")
+```
+
+Let us examine the relationship between % recent checkups and % well-perceived general health. As suspected, there does not appear to be a trend between the two variables.
+
+```{r}
+ggplot(groupby_statehealthcheck, aes(x = percent_recent, y = percent_good)) +
+  geom_point() + ggtitle("Fig. 7, % Good Perceived Health vs % Recent Checkups") +
+  xlab("% Checkup within Last Year") + ylab("% Good Perceived Health")
+```
+
+How about between % recent checkups and % unable to seek medical help as a result of costs?
+
+```{r}
+ggplot(groupby_statehealthcheck, aes(x = percent_cost, y = percent_recent)) +
+  geom_point() + ggtitle("Fig. 8, % Recent Checkups vs % Deterred Due to Cost") +
+  xlab("% Deterred Due to Cost") + ylab("% Checkup within Last Year")
+```
+
+Surprisingly, one would think that a deterrence from medical care due to costs would be correlated with the % of recent checkups, but this is not the case. One plausible explanation for this is that individuals may often be deterred from highly expensive medical procedures for specific diseases or ailments, rather than regular checkups which are comparatively more affordable.
+
+A further study specifically into persons who have been deterred from seeking medical care due to costs may shed further light on this, since they constitute only a small percentage (approximately 5-20%) of our sample from BRFSS.
+
+Finally, we plot the % good perceived health against % deterred due to cost.
+
+```{r}
+ggplot(groupby_statehealthcheck, aes(x = percent_cost, y = percent_good)) +
+  geom_point() + ggtitle("Fig. 9, % Good Perceived Health vs % Deterred Due to Cost") +
+  xlab("% Deterred Due to Cost") + ylab("% Good Perceived Health")
+```
+
+Now, we observe a weak downward trend of perception of general health vs % deterred from seeking healthcare due to medical costs. In addition to the weak trend, there are also significant outliers to the trend. In particular, Guam has the highest % deterred from healthcare at 20.6%, but has a relatively healthy % of good perceived general health of 80.9%. On the other hand, Puerto Rico which has the lowest % of good perceived general health, has only a moderate value of % deterred from healthcare at 13.6%. Thus, the correlation between the two variables will need to be verified through other means.
+
+</br>
+
+* * *
+
+### **Concluding Thoughts**
+
+</br>
+
+In this project, three research objectives pertaining to perceived level of general health were explored. While some hypotheses were verified, other trends prove weak with the analysis performed and may require further verification through study with other variables or deeper experimentation. As a first experience performing exploratory data analysis and with R, the project has proven a fun challenge in crafting directed objectives and then taking methodological steps to fulfill them. Thank you for reading!
+
+</br>
+
+* * *
